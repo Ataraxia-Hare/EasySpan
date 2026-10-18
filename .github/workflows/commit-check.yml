@@ -1,0 +1,65 @@
+name: Commit Message Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  commit-message-check:
+    name: Commit Message Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          allowed_types="feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+
+          # Check every non-merge commit in this pull request.
+          commits=$(git log --no-merges --format='%H' \
+            "${BASE_SHA}..${HEAD_SHA}")
+
+          if [[ -z "$commits" ]]; then
+            echo "No commits found to validate."
+            exit 1
+          fi
+
+          failed=0
+
+          while IFS= read -r commit; do
+            [[ -z "$commit" ]] && continue
+
+            subject=$(git show -s --format='%s' "$commit")
+
+            echo "Checking: $subject"
+
+            if [[ "$subject" =~ ^(${allowed_types})(\([a-z0-9._/-]+\))?!?:\ .+ ]]; then
+              echo "PASS: $subject"
+            else
+              echo "::error title=Invalid commit message::${subject}"
+              echo "Expected: <type>(<scope>): <description>"
+              echo "Allowed types: ${allowed_types//|/, }"
+              failed=1
+            fi
+          done <<< "$commits"
+
+          if [[ "$failed" -ne 0 ]]; then
+            echo "Commit message validation failed."
+            exit 1
+          fi
+
+          echo "All commit messages passed."
