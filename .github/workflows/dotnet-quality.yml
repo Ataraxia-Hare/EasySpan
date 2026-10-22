@@ -1,0 +1,36 @@
+name: .NET Quality Check
+
+on:
+    pull_request:
+        branches: [main]
+    push:
+        branches: [main]
+
+permissions:
+    contents: read
+
+jobs:
+    quality:
+        name: .NET Quality Check
+        runs-on: ubuntu-latest
+        
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Setup .NET SDK
+              uses: actions/setup-dotnet@v6
+              with:
+                  dotnet-version: '9.0.x'
+
+            - name: Restore dependencies
+              run: dotnet restore EasySpan.sln
+
+            - name: Check code format and style
+              run: dotnet format EasySpan.sln --no-restore --verify-no-changes
+
+            - name: Build and analyze
+              run: dotnet build EasySpan.sln --configuration Release --no-restore -warnaserror
+
+            - name: Run tests
+              run: dotnet test EasySpan.sln --configuration Release --no-build
