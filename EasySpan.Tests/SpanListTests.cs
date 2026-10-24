@@ -1,4 +1,4 @@
-﻿namespace EasySpan.Tests;
+namespace EasySpan.Tests;
 
 /// <summary>
 /// Unit tests for <see cref="SpanList{T}"/>.
