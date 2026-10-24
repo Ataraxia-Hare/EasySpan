@@ -1,8 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
+# 
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasySpan", "EasySpan\EasySpan.csproj", "{9705FE39-5EF9-4EE2-8FF7-4EACFDF72B2B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasySpan.Tests", "EasySpan.Tests\EasySpan.Tests.csproj", "{6AC03A3B-3805-49F1-8540-CCD9D0BEA8F6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasySpan.Benchmarks", "EasySpan.Benchmarks\EasySpan.Benchmarks.csproj", "{5E824486-44F5-4B85-8E3B-E2995C4DD6EC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -18,5 +21,9 @@ Global
 		{6AC03A3B-3805-49F1-8540-CCD9D0BEA8F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6AC03A3B-3805-49F1-8540-CCD9D0BEA8F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6AC03A3B-3805-49F1-8540-CCD9D0BEA8F6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5E824486-44F5-4B85-8E3B-E2995C4DD6EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5E824486-44F5-4B85-8E3B-E2995C4DD6EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5E824486-44F5-4B85-8E3B-E2995C4DD6EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5E824486-44F5-4B85-8E3B-E2995C4DD6EC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
