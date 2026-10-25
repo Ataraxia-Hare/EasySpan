@@ -8,7 +8,6 @@ namespace EasySpan.Benchmarks;
 [MemoryDiagnoser]
 public class SpanListVsListBenchmarks
 {
-    private int[] _buffer = null!;
     private List<int> _list = null!;
 
     /// <summary>Number of elements used by each scenario.</summary>
@@ -19,23 +18,15 @@ public class SpanListVsListBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _buffer = new int[N];
         _list = new List<int>(N);
-        for (var i = 0; i < N; i++) _list.Add(i);
-    }
-
-    private SpanList<int> Filled()
-    {
-        var list = new SpanList<int>(_buffer);
-        for (var i = 0; i < N; i++) list.Add(i);
-        return list;
     }
 
     /// <summary>Fills a SpanList over an existing buffer.</summary>
     [Benchmark]
     public int SpanList_Add()
     {
-        var list = new SpanList<int>(_buffer);
+        Span<int> buffer = stackalloc int[N];
+        var list = new SpanList<int>(buffer);
         for (var i = 0; i < N; i++) list.Add(i);
         return list.Count;
     }
@@ -62,7 +53,10 @@ public class SpanListVsListBenchmarks
     [Benchmark]
     public int SpanList_IndexerSum()
     {
-        var list = Filled();
+        Span<int> buffer = stackalloc int[N];
+        var list = new SpanList<int>(buffer);
+        for (var i = 0; i < N; i++) list.Add(i);
+
         var sum = 0;
         for (var i = 0; i < list.Count; i++) sum += list[i];
         return sum;
@@ -73,31 +67,59 @@ public class SpanListVsListBenchmarks
     public int List_IndexerSum()
     {
         var sum = 0;
-        for (var i = 0; i < _list.Count; i++) sum += _list[i];
+        for (var i = 0; i < N; i++) _list.Add(i);
+
+        foreach (var t in _list)
+        {
+            sum += t;
+        }
+
         return sum;
     }
 
     /// <summary>Fills a SpanList then searches for the last element.</summary>
     [Benchmark]
-    public bool SpanList_Contains() => Filled().Contains(N - 1);
+    public bool SpanList_Contains()
+    {
+        Span<int> buffer = stackalloc int[N];
+        var list = new SpanList<int>(buffer);
+        for (var i = 0; i < N; i++) list.Add(i);
+        return list.Contains(N - 1);
+    }
 
     /// <summary>Searches for the last element in a List.</summary>
     [Benchmark]
-    public bool List_Contains() => _list.Contains(N - 1);
+    public bool List_Contains()
+    {
+        for (var i = 0; i < N; i++) _list.Add(i);
+        return _list.Contains(N - 1);
+    }
 
     /// <summary>Fills a SpanList then finds the last element's index.</summary>
     [Benchmark]
-    public int SpanList_IndexOf() => Filled().IndexOf(N - 1);
+    public int SpanList_IndexOf()
+    {
+        Span<int> buffer = stackalloc int[N];
+        var list = new SpanList<int>(buffer);
+        for (var i = 0; i < N; i++) list.Add(i);
+        return list.IndexOf(N - 1);
+    }
 
     /// <summary>Finds the index of the last element in a List.</summary>
     [Benchmark]
-    public int List_IndexOf() => _list.IndexOf(N - 1);
+    public int List_IndexOf()
+    {
+        for (var i = 0; i < N; i++) _list.Add(i);
+        return _list.IndexOf(N - 1);
+    }
 
     /// <summary>Fills a SpanList then removes the first element (worst-case shift).</summary>
     [Benchmark]
     public int SpanList_RemoveAt()
     {
-        var list = Filled();
+        Span<int> buffer = stackalloc int[N];
+        var list = new SpanList<int>(buffer);
+        for (var i = 0; i < N; i++) list.Add(i);
         list.RemoveAt(0);
         return list.Count;
     }
@@ -106,7 +128,9 @@ public class SpanListVsListBenchmarks
     [Benchmark]
     public int List_RemoveAt()
     {
-        var list = new List<int>(_list);
+        var list = new List<int>(N);
+        for (var i = 0; i < N; i++) list.Add(i);
+
         list.RemoveAt(0);
         return list.Count;
     }
@@ -115,7 +139,10 @@ public class SpanListVsListBenchmarks
     [Benchmark]
     public int SpanList_ClearRefill()
     {
-        var list = Filled();
+        Span<int> buffer = stackalloc int[N];
+        var list = new SpanList<int>(buffer);
+        for (var i = 0; i < N; i++) list.Add(i);
+
         list.Clear();
         for (var i = 0; i < N; i++) list.Add(i);
         return list.Count;
@@ -125,7 +152,9 @@ public class SpanListVsListBenchmarks
     [Benchmark]
     public int List_ClearRefill()
     {
-        var list = new List<int>(_list);
+        var list = new List<int>(N);
+        for (var i = 0; i < N; i++) list.Add(i);
+
         list.Clear();
         for (var i = 0; i < N; i++) list.Add(i);
         return list.Count;
