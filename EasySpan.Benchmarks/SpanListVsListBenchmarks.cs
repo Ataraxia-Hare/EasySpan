@@ -67,6 +67,7 @@ public class SpanListVsListBenchmarks
     public int List_IndexerSum()
     {
         var sum = 0;
+        _list.Clear();
         for (var i = 0; i < N; i++) _list.Add(i);
 
         foreach (var t in _list)
@@ -91,6 +92,7 @@ public class SpanListVsListBenchmarks
     [Benchmark]
     public bool List_Contains()
     {
+        _list.Clear();
         for (var i = 0; i < N; i++) _list.Add(i);
         return _list.Contains(N - 1);
     }
@@ -109,6 +111,7 @@ public class SpanListVsListBenchmarks
     [Benchmark]
     public int List_IndexOf()
     {
+        _list.Clear();
         for (var i = 0; i < N; i++) _list.Add(i);
         return _list.IndexOf(N - 1);
     }

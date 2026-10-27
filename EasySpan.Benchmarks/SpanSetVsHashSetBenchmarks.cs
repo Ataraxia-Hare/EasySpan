@@ -87,6 +87,7 @@ public class SpanSetVsHashSetBenchmarks
     [Benchmark]
     public bool HashSet_Contains_Hit()
     {
+        _hashSet.Clear();
         for (var i = 0; i < N; i++) _hashSet.Add(i);
         return _hashSet.Contains(N - 1);
     }
@@ -105,6 +106,7 @@ public class SpanSetVsHashSetBenchmarks
     [Benchmark]
     public bool HashSet_Contains_Miss()
     {
+        _hashSet.Clear();
         for (var i = 0; i < N; i++) _hashSet.Add(i);
         return _hashSet.Contains(-1);
     }
@@ -126,6 +128,7 @@ public class SpanSetVsHashSetBenchmarks
     [Benchmark]
     public int HashSet_EnumerateSum()
     {
+        _hashSet.Clear();
         for (var i = 0; i < N; i++) _hashSet.Add(i);
 
         var sum = 0;
@@ -194,6 +197,7 @@ public class SpanSetVsHashSetBenchmarks
     [Benchmark]
     public bool HashSet_Overlaps()
     {
+        _hashSet.Clear();
         for (var i = 0; i < N; i++) _hashSet.Add(i);
         return _hashSet.Overlaps(_other);
     }
