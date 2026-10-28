@@ -173,6 +173,12 @@ namespace EasySpan
         /// <param name="other">The elements to keep.</param>
         public void IntersectWith(ReadOnlySpan<T> other)
         {
+            if (other.Length == 0)
+            {
+                Clear();
+                return;
+            }
+
             for (var i = Count - 1; i >= 0; i--)
             {
                 if (other.IndexOf(_span[i]) == -1)
@@ -220,6 +226,11 @@ namespace EasySpan
         /// <returns>True if the set is a subset of <paramref name="other"/>; otherwise, false.</returns>
         public readonly bool IsSubsetOf(ReadOnlySpan<T> other)
         {
+            if (other.Length < Count)
+            {
+                return false;
+            }
+
             for (var i = 0; i < Count; i++)
             {
                 if (other.IndexOf(_span[i]) == -1)
@@ -238,6 +249,11 @@ namespace EasySpan
         /// <returns>True if the set is a superset of <paramref name="other"/>; otherwise, false.</returns>
         public readonly bool IsSupersetOf(ReadOnlySpan<T> other)
         {
+            if (Count < other.Length)
+            {
+                return false;
+            }
+
             foreach (var item in other)
             {
                 if (!Contains(item))
