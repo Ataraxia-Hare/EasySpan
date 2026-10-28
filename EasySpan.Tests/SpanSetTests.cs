@@ -59,7 +59,11 @@ public class SpanSetTests
     [Fact]
     public void Constructor_WithCountGreaterThanCapacity_Throws()
     {
-        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new SpanSet<int>(stackalloc int[3], 4));
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            Span<int> buffer = stackalloc int[3];
+            _ = new SpanSet<int>(buffer, 4);
+        });
         Assert.Equal("count", ex.ParamName);
     }
 
@@ -69,7 +73,11 @@ public class SpanSetTests
     [Fact]
     public void Constructor_WithDuplicateInitialElements_Throws()
     {
-        var ex = Assert.Throws<ArgumentException>(() => new SpanSet<int>(stackalloc int[] { 1, 2, 1 }, 3));
+        var ex = Assert.Throws<ArgumentException>(() =>
+        {
+            Span<int> buffer = stackalloc int[] { 1, 2, 1 };
+            _ = new SpanSet<int>(buffer, 3);
+        });
         Assert.Equal("span", ex.ParamName);
     }
 

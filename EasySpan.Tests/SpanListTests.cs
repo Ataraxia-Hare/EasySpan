@@ -59,7 +59,11 @@ public class SpanListTests
     [Fact]
     public void Constructor_WithCountGreaterThanCapacity_Throws()
     {
-        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new SpanList<int>(stackalloc int[3], 4));
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            Span<int> buffer = stackalloc int[3];
+            _ = new SpanList<int>(buffer, 4);
+        });
         Assert.Equal("count", ex.ParamName);
     }
 
