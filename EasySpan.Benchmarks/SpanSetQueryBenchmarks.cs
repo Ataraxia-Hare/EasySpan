@@ -8,11 +8,10 @@ namespace EasySpan.Benchmarks;
 /// batches of queries over a pre-filled set, so that construction cost is amortized rather than measured.
 /// </summary>
 /// <remarks>
-/// <see cref="SpanSet{T}"/> is a ref struct and cannot be stored in a field, and its count constructor
-/// validates uniqueness in O(n²). Each span benchmark therefore constructs the set once per invocation and
-/// runs <see cref="ContainsBatchSize"/> or <see cref="OverlapsBatchSize"/> queries; the reported per-operation
-/// time still includes the construction cost divided by the batch size. The hash set is pre-filled in
-/// <see cref="Setup"/> and runs the identical query sequence.
+/// <see cref="SpanSet{T}"/> is a ref struct and cannot be stored in a field, so each span benchmark wraps
+/// the pre-filled array with <see cref="SpanSet.CreateUnchecked{T}"/>, which is O(1), and then runs
+/// <see cref="ContainsBatchSize"/> or <see cref="OverlapsBatchSize"/> queries. The hash set is pre-filled
+/// in <see cref="Setup"/> and runs the identical query sequence.
 /// </remarks>
 [MemoryDiagnoser]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
@@ -25,14 +24,18 @@ public class SpanSetQueryBenchmarks
     /// <summary>Number of overlap checks executed per invocation.</summary>
     public const int OverlapsBatchSize = 64;
 
+    /// <summary>Length of the short probe span used by the ShortOther overlap benchmarks.</summary>
+    public const int ShortOtherLength = 8;
+
     private int[] _buffer = null!;
     private int[] _hitQueries = null!;
     private int[] _missQueries = null!;
     private int[] _other = null!;
+    private int[] _shortOther = null!;
     private HashSet<int> _hashSet = null!;
 
     /// <summary>Number of elements held by each set.</summary>
-    [Params(16, 256, 4096)]
+    [Params(16, 32, 64, 256, 4096)]
     public int N { get; set; }
 
     /// <summary>Fills the shared storage, generates fixed query sequences, and prepares the overlap input.</summary>
@@ -55,6 +58,10 @@ public class SpanSetQueryBenchmarks
         _other = new int[N];
         for (var i = 0; i < N; i++) _other[i] = N + i;
         _other[N - 1] = N - 1;
+
+        _shortOther = new int[ShortOtherLength];
+        for (var i = 0; i < ShortOtherLength; i++) _shortOther[i] = N + i;
+        _shortOther[ShortOtherLength - 1] = N - 1;
     }
 
     /// <summary>Runs present-element queries against a SpanSet constructed once per invocation.</summary>
@@ -62,7 +69,7 @@ public class SpanSetQueryBenchmarks
     [BenchmarkCategory("Contains_Hit")]
     public int SpanSet_Contains_Hit()
     {
-        var set = new SpanSet<int>(_buffer, N);
+        var set = SpanSet.CreateUnchecked<int>(_buffer, N);
         return CountHits(set, _hitQueries);
     }
 
@@ -76,7 +83,7 @@ public class SpanSetQueryBenchmarks
     [BenchmarkCategory("Contains_Miss")]
     public int SpanSet_Contains_Miss()
     {
-        var set = new SpanSet<int>(_buffer, N);
+        var set = SpanSet.CreateUnchecked<int>(_buffer, N);
         return CountHits(set, _missQueries);
     }
 
@@ -90,7 +97,7 @@ public class SpanSetQueryBenchmarks
     [BenchmarkCategory("Overlaps")]
     public int SpanSet_Overlaps()
     {
-        var set = new SpanSet<int>(_buffer, N);
+        var set = SpanSet.CreateUnchecked<int>(_buffer, N);
         var hits = 0;
         for (var i = 0; i < OverlapsBatchSize; i++)
         {
@@ -109,6 +116,35 @@ public class SpanSetQueryBenchmarks
         for (var i = 0; i < OverlapsBatchSize; i++)
         {
             if (_hashSet.Overlaps(_other)) hits++;
+        }
+
+        return hits;
+    }
+
+    /// <summary>Repeats an overlap check with a short probe span whose last element is shared, against a SpanSet.</summary>
+    [Benchmark(Baseline = true, OperationsPerInvoke = OverlapsBatchSize)]
+    [BenchmarkCategory("Overlaps_ShortOther")]
+    public int SpanSet_Overlaps_ShortOther()
+    {
+        var set = SpanSet.CreateUnchecked<int>(_buffer, N);
+        var hits = 0;
+        for (var i = 0; i < OverlapsBatchSize; i++)
+        {
+            if (set.Overlaps(_shortOther)) hits++;
+        }
+
+        return hits;
+    }
+
+    /// <summary>Repeats an overlap check with a short probe span whose last element is shared, against a HashSet.</summary>
+    [Benchmark(OperationsPerInvoke = OverlapsBatchSize)]
+    [BenchmarkCategory("Overlaps_ShortOther")]
+    public int HashSet_Overlaps_ShortOther()
+    {
+        var hits = 0;
+        for (var i = 0; i < OverlapsBatchSize; i++)
+        {
+            if (_hashSet.Overlaps(_shortOther)) hits++;
         }
 
         return hits;

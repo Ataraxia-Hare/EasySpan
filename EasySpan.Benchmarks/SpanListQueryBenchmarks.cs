@@ -29,7 +29,7 @@ public class SpanListQueryBenchmarks
     private int _missing;
 
     /// <summary>Number of elements held by each collection.</summary>
-    [Params(16, 256, 4096)]
+    [Params(16, 32, 64, 256, 4096)]
     public int N { get; set; }
 
     /// <summary>Fills the shared storage and generates a fixed query sequence with roughly 50% hits.</summary>
