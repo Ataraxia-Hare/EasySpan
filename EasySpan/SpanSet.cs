@@ -4,11 +4,38 @@ using System.Runtime.InteropServices;
 namespace EasySpan
 {
     /// <summary>
+    /// Provides factory methods for <see cref="SpanSet{T}"/>.
+    /// </summary>
+    public static class SpanSet
+    {
+        /// <summary>
+        /// Creates a <see cref="SpanSet{T}"/> over the first <paramref name="count"/> elements of the backing
+        /// <see cref="Span{T}"/> without validating that they are unique.
+        /// </summary>
+        /// <remarks>
+        /// The caller must guarantee that the first <paramref name="count"/> elements are distinct; duplicates
+        /// leave the set in an inconsistent state. Prefer this over the count constructor for large inputs,
+        /// where the O(n²) uniqueness check would dominate.
+        /// </remarks>
+        /// <typeparam name="T">The unmanaged type of elements, implementing <see cref="IEquatable{T}"/>.</typeparam>
+        /// <param name="span">The <see cref="Span{T}"/> used to store the set elements.</param>
+        /// <param name="count">The initial number of elements in the set.</param>
+        /// <returns>A set exposing the leading elements of <paramref name="span"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The count exceeds the span length.</exception>
+        public static SpanSet<T> CreateUnchecked<T>(Span<T> span, int count) where T : unmanaged, IEquatable<T>
+        {
+            return new SpanSet<T>(span, count, validate: false);
+        }
+    }
+
+    /// <summary>
     /// Represents a fixed-capacity set of unique elements backed by a caller-provided <see cref="Span{T}"/>.
     /// </summary>
     /// <remarks>
     /// Elements are stored linearly; membership checks are O(n). This type is intended for small sets
-    /// in allocation-sensitive code paths, where it avoids the heap allocations of <c>HashSet&lt;T&gt;</c>.
+    /// (roughly up to a few dozen elements) in allocation-sensitive code paths, where it avoids the heap
+    /// allocations of <c>HashSet&lt;T&gt;</c>. The count constructor validates uniqueness in O(n²); when
+    /// the caller already guarantees distinct elements, use <see cref="SpanSet.CreateUnchecked{T}"/> to skip that cost.
     /// </remarks>
     /// <typeparam name="T">The unmanaged type of elements, implementing <see cref="IEquatable{T}"/>.</typeparam>
     public ref struct SpanSet<T> where T : unmanaged, IEquatable<T>
@@ -41,6 +68,11 @@ namespace EasySpan
         /// <exception cref="ArgumentOutOfRangeException">The count exceeds the span length.</exception>
         /// <exception cref="ArgumentException">The first <paramref name="count"/> elements contain duplicates.</exception>
         public SpanSet(Span<T> span, int count)
+            : this(span, count, validate: true)
+        {
+        }
+
+        internal SpanSet(Span<T> span, int count, bool validate)
         {
             _span = span;
             Count = count;
@@ -50,9 +82,14 @@ namespace EasySpan
                     "Count cannot be greater than the capacity of the span.");
             }
 
+            if (!validate)
+            {
+                return;
+            }
+
             for (var i = 1; i < Count; i++)
             {
-                if (IndexOf(_span[i], i) != -1)
+                if (SpanSearch.Contains(Prefix(i), _span[i]))
                 {
                     throw new ArgumentException("The initial elements must be unique.", nameof(span));
                 }

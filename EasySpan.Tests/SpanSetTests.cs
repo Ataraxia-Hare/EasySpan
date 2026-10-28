@@ -92,6 +92,51 @@ public class SpanSetTests
         Assert.Equal(2, set.Count);
     }
 
+    /// <summary>
+    /// <see cref="SpanSet.CreateUnchecked{T}"/> exposes the first <paramref name="count"/> existing elements of the span.
+    /// </summary>
+    /// <param name="count">The initial element count.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void CreateUnchecked_SetsCountAndKeepsExistingData(int count)
+    {
+        var set = SpanSet.CreateUnchecked(stackalloc int[] { 1, 2, 3, 4 }, count);
+
+        Assert.Equal(count, set.Count);
+        Assert.Equal(4, set.Capacity);
+        for (var i = 1; i <= count; i++)
+        {
+            Assert.True(set.Contains(i));
+        }
+    }
+
+    /// <summary>
+    /// <see cref="SpanSet.CreateUnchecked{T}"/> still rejects a count greater than the span length.
+    /// </summary>
+    [Fact]
+    public void CreateUnchecked_WithCountGreaterThanCapacity_Throws()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            Span<int> buffer = stackalloc int[3];
+            _ = SpanSet.CreateUnchecked(buffer, 4);
+        });
+        Assert.Equal("count", ex.ParamName);
+    }
+
+    /// <summary>
+    /// <see cref="SpanSet.CreateUnchecked{T}"/> skips the uniqueness check and accepts duplicate initial elements.
+    /// </summary>
+    [Fact]
+    public void CreateUnchecked_WithDuplicateInitialElements_DoesNotThrow()
+    {
+        var set = SpanSet.CreateUnchecked(stackalloc int[] { 1, 2, 1 }, 3);
+
+        Assert.Equal(3, set.Count);
+    }
+
     #endregion
 
     #region Add / TryAdd
