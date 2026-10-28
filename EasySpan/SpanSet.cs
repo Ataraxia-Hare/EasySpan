@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 
 namespace EasySpan
 {
@@ -62,6 +63,12 @@ namespace EasySpan
         /// Gets the maximum number of elements the backing <see cref="Span{T}"/> can hold.
         /// </summary>
         public readonly int Capacity => _span.Length;
+
+        /// <summary>
+        /// Gets a read-only view over the first <see cref="Count"/> elements without a bounds check;
+        /// the invariant <c>Count &lt;= Capacity</c> is maintained by every mutating member.
+        /// </summary>
+        private readonly ReadOnlySpan<T> Items => Prefix(Count);
 
         /// <summary>
         /// Determines whether <see cref="Count"/> equals <see cref="Capacity"/>.
@@ -129,7 +136,7 @@ namespace EasySpan
         /// <returns>True if the element is found; otherwise, false.</returns>
         public readonly bool Contains(T item)
         {
-            return IndexOf(item, Count) != -1;
+            return SpanSearch.Contains(Items, item);
         }
 
         /// <summary>
@@ -181,7 +188,7 @@ namespace EasySpan
 
             for (var i = Count - 1; i >= 0; i--)
             {
-                if (other.IndexOf(_span[i]) == -1)
+                if (!SpanSearch.Contains(other, _span[i]))
                 {
                     Count--;
                     _span[i] = _span[Count];
@@ -231,9 +238,9 @@ namespace EasySpan
                 return false;
             }
 
-            for (var i = 0; i < Count; i++)
+            foreach (var item in Items)
             {
-                if (other.IndexOf(_span[i]) == -1)
+                if (!SpanSearch.Contains(other, item))
                 {
                     return false;
                 }
@@ -250,9 +257,10 @@ namespace EasySpan
         /// <returns>True if the set is a superset of <paramref name="other"/>; otherwise, false.</returns>
         public readonly bool IsSupersetOf(ReadOnlySpan<T> other)
         {
+            var self = Items;
             foreach (var item in other)
             {
-                if (!Contains(item))
+                if (!SpanSearch.Contains(self, item))
                 {
                     return false;
                 }
@@ -279,7 +287,7 @@ namespace EasySpan
         /// <returns>An allocation-free enumerator for use with <c>foreach</c>.</returns>
         public readonly ReadOnlySpan<T>.Enumerator GetEnumerator()
         {
-            return ((ReadOnlySpan<T>)_span[..Count]).GetEnumerator();
+            return Items.GetEnumerator();
         }
 
         /// <summary>
@@ -289,7 +297,7 @@ namespace EasySpan
         /// <returns>A <see cref="ReadOnlySpan{T}"/> over the first <see cref="Count"/> elements of the backing span.</returns>
         public static implicit operator ReadOnlySpan<T>(SpanSet<T> spanSet)
         {
-            return spanSet._span[..spanSet.Count];
+            return spanSet.Items;
         }
 
         /// <summary>
@@ -300,7 +308,18 @@ namespace EasySpan
         /// <returns>The index of the element, or -1 if it is not found.</returns>
         private readonly int IndexOf(T item, int length)
         {
-            return _span[..length].IndexOf(item);
+            return Prefix(length).IndexOf(item);
+        }
+
+        /// <summary>
+        /// Creates a read-only view over the first <paramref name="length"/> elements of the backing span
+        /// without a bounds check. Callers must guarantee <c>0 &lt;= length &lt;= Capacity</c>.
+        /// </summary>
+        /// <param name="length">The number of leading elements to expose.</param>
+        /// <returns>A <see cref="ReadOnlySpan{T}"/> over the leading elements.</returns>
+        private readonly ReadOnlySpan<T> Prefix(int length)
+        {
+            return MemoryMarshal.CreateReadOnlySpan(ref MemoryMarshal.GetReference(_span), length);
         }
     }
 }

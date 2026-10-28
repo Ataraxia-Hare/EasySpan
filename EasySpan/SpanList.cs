@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 
 namespace EasySpan
 {
@@ -51,6 +52,12 @@ namespace EasySpan
         public readonly int Capacity => _span.Length;
 
         /// <summary>
+        /// Gets a writable view over the first <see cref="Count"/> elements without a bounds check;
+        /// the invariant <c>Count &lt;= Capacity</c> is maintained by every mutating member.
+        /// </summary>
+        private readonly Span<T> Items => MemoryMarshal.CreateSpan(ref MemoryMarshal.GetReference(_span), Count);
+
+        /// <summary>
         /// Determines whether <see cref="Count"/> equals <see cref="Capacity"/>.
         /// </summary>
         /// <returns>True if the count equals the capacity; otherwise, false.</returns>
@@ -92,7 +99,7 @@ namespace EasySpan
         /// <returns>True if the element is found; otherwise, false.</returns>
         public readonly bool Contains(T item)
         {
-            return IndexOf(item) != -1;
+            return SpanSearch.Contains(Items, item);
         }
 
         /// <summary>
@@ -131,7 +138,7 @@ namespace EasySpan
         /// <returns>The index of the first matching element, or -1 if no match is found.</returns>
         public readonly int IndexOf(T item)
         {
-            return _span[..Count].IndexOf(item);
+            return Items.IndexOf(item);
         }
 
         /// <summary>
@@ -159,7 +166,7 @@ namespace EasySpan
         /// <returns>A <see cref="Span{T}"/> over the first <see cref="Count"/> elements of the backing span.</returns>
         public static implicit operator Span<T>(SpanList<T> spanList)
         {
-            return spanList._span[..spanList.Count];
+            return spanList.Items;
         }
 
         /// <summary>
@@ -169,7 +176,7 @@ namespace EasySpan
         /// <returns>A <see cref="ReadOnlySpan{T}"/> over the first <see cref="Count"/> elements of the backing span.</returns>
         public static implicit operator ReadOnlySpan<T>(SpanList<T> spanList)
         {
-            return spanList._span[..spanList.Count];
+            return spanList.Items;
         }
     }
 }
