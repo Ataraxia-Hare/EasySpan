@@ -131,15 +131,7 @@ namespace EasySpan
         /// <returns>The index of the first matching element, or -1 if no match is found.</returns>
         public readonly int IndexOf(T item)
         {
-            for (var index = 0; index < Count; index++)
-            {
-                if (_span[index].Equals(item))
-                {
-                    return index;
-                }
-            }
-
-            return -1;
+            return _span[..Count].IndexOf(item);
         }
 
         /// <summary>

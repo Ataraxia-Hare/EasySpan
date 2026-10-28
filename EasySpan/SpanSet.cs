@@ -288,15 +288,7 @@ namespace EasySpan
         /// <returns>The index of the element, or -1 if it is not found.</returns>
         private readonly int IndexOf(T item, int length)
         {
-            for (var index = 0; index < length; index++)
-            {
-                if (_span[index].Equals(item))
-                {
-                    return index;
-                }
-            }
-
-            return -1;
+            return _span[..length].IndexOf(item);
         }
     }
 }
