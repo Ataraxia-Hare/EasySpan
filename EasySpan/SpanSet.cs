@@ -215,9 +215,24 @@ namespace EasySpan
         /// <returns>True if at least one element is common; otherwise, false.</returns>
         public readonly bool Overlaps(ReadOnlySpan<T> other)
         {
-            foreach (var item in other)
+            var self = Items;
+            if (self.Length == 0 || other.Length == 0)
             {
-                if (Contains(item))
+                return false;
+            }
+
+            // Iterate the shorter side so each vectorized scan covers the longer one.
+            var outer = other;
+            var inner = self;
+            if (self.Length < other.Length)
+            {
+                outer = self;
+                inner = other;
+            }
+
+            foreach (var item in outer)
+            {
+                if (SpanSearch.Contains(inner, item))
                 {
                     return true;
                 }

@@ -670,6 +670,44 @@ public class SpanSetTests
     }
 
     /// <summary>
+    /// <see cref="SpanSet{T}.Overlaps"/> finds shared elements when the other span is shorter than the set.
+    /// </summary>
+    [Fact]
+    public void Overlaps_OtherShorterThanSet_ReflectsSharedElements()
+    {
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3, 4 }, 4);
+
+        Assert.True(set.Overlaps(stackalloc int[] { 9, 4 }));
+        Assert.True(set.Overlaps(stackalloc int[] { 1 }));
+        Assert.False(set.Overlaps(stackalloc int[] { 9, 8 }));
+    }
+
+    /// <summary>
+    /// <see cref="SpanSet{T}.Overlaps"/> finds shared elements when the other span is longer than the set.
+    /// </summary>
+    [Fact]
+    public void Overlaps_OtherLongerThanSet_ReflectsSharedElements()
+    {
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
+
+        Assert.True(set.Overlaps(stackalloc int[] { 9, 8, 7, 2 }));
+        Assert.True(set.Overlaps(stackalloc int[] { 1, 8, 7, 6 }));
+        Assert.False(set.Overlaps(stackalloc int[] { 9, 8, 7, 6 }));
+    }
+
+    /// <summary>
+    /// An empty set never overlaps, even with a non-empty span.
+    /// </summary>
+    [Fact]
+    public void Overlaps_EmptySet_IsFalse()
+    {
+        var set = new SpanSet<int>(stackalloc int[2]);
+
+        Assert.False(set.Overlaps(stackalloc int[] { 1, 2 }));
+        Assert.False(set.Overlaps(ReadOnlySpan<int>.Empty));
+    }
+
+    /// <summary>
     /// <see cref="SpanSet{T}.IsSubsetOf"/> is true when every element is present in the other span.
     /// </summary>
     [Fact]
