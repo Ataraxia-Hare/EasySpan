@@ -70,9 +70,9 @@ public class SpanListVsListBenchmarks
         _list.Clear();
         for (var i = 0; i < N; i++) _list.Add(i);
 
-        foreach (var t in _list)
+        for (var index = 0; index < _list.Count; index++)
         {
-            sum += t;
+            sum += _list[index];
         }
 
         return sum;
