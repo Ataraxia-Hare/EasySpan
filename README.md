@@ -170,11 +170,26 @@ Run only the set comparisons:
 dotnet run -c Release --project .\EasySpan.Benchmarks -- --filter '*SpanSetVsHashSet*'
 ```
 
-Interpret results per scenario: some span benchmarks include filling the collection before
-querying it, while their standard-collection counterparts query pre-filled collections.
-List removal also has different semantics: `List<T>.RemoveAt` preserves order, while
-`SpanList<T>.RemoveAt` does not. Results are workload- and environment-dependent; benchmark
-your actual use case rather than assuming a general speedup.
+Two kinds of benchmarks are provided:
+
+- `SpanListVsListBenchmarks` and `SpanSetVsHashSetBenchmarks` are end-to-end scenarios:
+  both sides allocate or clear, fill, and then use the collection inside the timed region.
+- `SpanListQueryBenchmarks` and `SpanSetQueryBenchmarks` isolate query operations
+  (`Contains`, `IndexOf`, indexer access, `Overlaps`) over pre-filled storage. List queries
+  wrap a pre-filled array with the O(1) count constructor. Set queries construct the set once
+  per invocation and run a batch of queries, so the reported per-operation time still
+  includes the O(n²) uniqueness validation divided by the batch size. The list batch also
+  compares a stack-allocated and a heap-allocated buffer over the same query sequence.
+
+Run only the isolated query benchmarks:
+
+```powershell
+dotnet run -c Release --project .\EasySpan.Benchmarks -- --filter '*QueryBenchmarks*'
+```
+
+Interpret results per scenario. List removal has different semantics: `List<T>.RemoveAt`
+preserves order, while `SpanList<T>.RemoveAt` does not. Results are workload- and
+environment-dependent; benchmark your actual use case rather than assuming a general speedup.
 
 ## Documentation
 

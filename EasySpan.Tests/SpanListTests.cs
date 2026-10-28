@@ -13,7 +13,7 @@ public class SpanListTests
     [Fact]
     public void Constructor_WithSpan_CreatesEmptyList()
     {
-        var list = new SpanList<int>(new int[4]);
+        var list = new SpanList<int>(stackalloc int[4]);
 
         Assert.Equal(0, list.Count);
         Assert.Equal(4, list.Capacity);
@@ -43,7 +43,7 @@ public class SpanListTests
     [InlineData(4)]
     public void Constructor_WithCount_SetsCountAndKeepsExistingData(int count)
     {
-        var list = new SpanList<int>(new[] { 1, 2, 3, 4 }, count);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2, 3, 4 }, count);
 
         Assert.Equal(count, list.Count);
         Assert.Equal(4, list.Capacity);
@@ -59,9 +59,11 @@ public class SpanListTests
     [Fact]
     public void Constructor_WithCountGreaterThanCapacity_Throws()
     {
-        var buffer = new int[3];
-
-        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new SpanList<int>(buffer, 4));
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            Span<int> buffer = stackalloc int[3];
+            _ = new SpanList<int>(buffer, 4);
+        });
         Assert.Equal("count", ex.ParamName);
     }
 
@@ -75,7 +77,7 @@ public class SpanListTests
     [Fact]
     public void Add_AppendsItemsInOrderAndWritesToBackingSpan()
     {
-        var buffer = new int[3];
+        Span<int> buffer = stackalloc int[] { 0, 0, 0 };
         var list = new SpanList<int>(buffer);
 
         list.Add(10);
@@ -84,7 +86,7 @@ public class SpanListTests
         Assert.Equal(2, list.Count);
         Assert.Equal(10, list[0]);
         Assert.Equal(20, list[1]);
-        Assert.Equal(new[] { 10, 20, 0 }, buffer);
+        Assert.True(buffer.SequenceEqual(stackalloc int[] { 10, 20, 0 }));
     }
 
     /// <summary>
@@ -93,7 +95,7 @@ public class SpanListTests
     [Fact]
     public void Add_UntilCapacity_BecomesFull()
     {
-        var list = new SpanList<int>(new int[2]);
+        var list = new SpanList<int>(stackalloc int[2]);
 
         list.Add(1);
         Assert.False(list.IsFull());
@@ -108,14 +110,22 @@ public class SpanListTests
     [Fact]
     public void Add_WhenFull_Throws()
     {
-        var buffer = new int[1];
+        Span<int> buffer = stackalloc int[1];
+        var list = new SpanList<int>(buffer);
+        list.Add(1);
 
-        Assert.Throws<InvalidOperationException>(() =>
+        InvalidOperationException? exception = null;
+        try
         {
-            var list = new SpanList<int>(buffer);
-            list.Add(1);
             list.Add(2);
-        });
+        }
+        catch (InvalidOperationException ex)
+        {
+            exception = ex;
+        }
+
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Equal(1, list.Count);
         Assert.Equal(1, buffer[0]);
     }
 
@@ -142,7 +152,7 @@ public class SpanListTests
     [Fact]
     public void Clear_ResetsCountButKeepsBackingData()
     {
-        var buffer = new int[3];
+        Span<int> buffer = stackalloc int[] { 0, 0, 0 };
         var list = new SpanList<int>(buffer);
         list.Add(1);
         list.Add(2);
@@ -151,7 +161,7 @@ public class SpanListTests
 
         Assert.Equal(0, list.Count);
         Assert.Equal(3, list.Capacity);
-        Assert.Equal(new[] { 1, 2, 0 }, buffer);
+        Assert.True(buffer.SequenceEqual(stackalloc int[] { 1, 2, 0 }));
     }
 
     /// <summary>
@@ -160,7 +170,7 @@ public class SpanListTests
     [Fact]
     public void Clear_ThenAdd_ReusesStorage()
     {
-        var list = new SpanList<int>(new int[2]);
+        var list = new SpanList<int>(stackalloc int[2]);
         list.Add(1);
         list.Add(2);
 
@@ -178,7 +188,7 @@ public class SpanListTests
     [Fact]
     public void Clear_OnEmptyList_DoesNothing()
     {
-        var list = new SpanList<int>(new int[2]);
+        var list = new SpanList<int>(stackalloc int[2]);
 
         list.Clear();
 
@@ -195,7 +205,7 @@ public class SpanListTests
     [Fact]
     public void IndexOf_ReturnsFirstMatch()
     {
-        var list = new SpanList<int>(new[] { 5, 7, 5, 9 }, 4);
+        var list = new SpanList<int>(stackalloc int[] { 5, 7, 5, 9 }, 4);
 
         Assert.Equal(0, list.IndexOf(5));
         Assert.Equal(1, list.IndexOf(7));
@@ -208,7 +218,7 @@ public class SpanListTests
     [Fact]
     public void IndexOf_MissingItem_ReturnsMinusOne()
     {
-        var list = new SpanList<int>(new[] { 1, 2, 3 }, 3);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2, 3 }, 3);
 
         Assert.Equal(-1, list.IndexOf(4));
     }
@@ -219,7 +229,7 @@ public class SpanListTests
     [Fact]
     public void IndexOf_IgnoresItemsBeyondCount()
     {
-        var list = new SpanList<int>(new[] { 1, 2, 3, 4 }, 2);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2, 3, 4 }, 2);
 
         Assert.Equal(-1, list.IndexOf(3));
         Assert.Equal(-1, list.IndexOf(4));
@@ -231,7 +241,7 @@ public class SpanListTests
     [Fact]
     public void IndexOf_OnEmptyList_ReturnsMinusOne()
     {
-        var list = new SpanList<int>(new int[2]);
+        var list = new SpanList<int>(stackalloc int[] { 0, 0 });
 
         Assert.Equal(-1, list.IndexOf(0));
     }
@@ -242,7 +252,7 @@ public class SpanListTests
     [Fact]
     public void Contains_ReflectsPresenceWithinCount()
     {
-        var list = new SpanList<int>(new[] { 1, 2, 3 }, 2);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2, 3 }, 2);
 
         Assert.True(list.Contains(1));
         Assert.True(list.Contains(2));
@@ -255,7 +265,7 @@ public class SpanListTests
     [Fact]
     public void IndexOf_WorksWithCustomEquatableStruct()
     {
-        var list = new SpanList<Point>(new Point[3]);
+        var list = new SpanList<Point>(stackalloc Point[3]);
         list.Add(new Point(1, 2));
         list.Add(new Point(3, 4));
 
@@ -273,7 +283,7 @@ public class SpanListTests
     [Fact]
     public void RemoveAt_ReplacesWithLastElement()
     {
-        var list = new SpanList<int>(new[] { 1, 2, 3, 4 }, 4);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2, 3, 4 }, 4);
 
         list.RemoveAt(1);
 
@@ -289,7 +299,7 @@ public class SpanListTests
     [Fact]
     public void RemoveAt_LastElement_ShrinksCount()
     {
-        var list = new SpanList<int>(new[] { 1, 2, 3 }, 3);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2, 3 }, 3);
 
         list.RemoveAt(2);
 
@@ -303,7 +313,7 @@ public class SpanListTests
     [Fact]
     public void RemoveAt_OnlyElement_EmptiesList()
     {
-        var list = new SpanList<int>(new[] { 1 }, 1);
+        var list = new SpanList<int>(stackalloc int[] { 1 }, 1);
 
         list.RemoveAt(0);
 
@@ -320,10 +330,9 @@ public class SpanListTests
     [InlineData(3)]
     public void RemoveAt_InvalidIndex_Throws(int index)
     {
-        var buffer = new[] { 1, 2, 3 };
-
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
         {
+            Span<int> buffer = stackalloc int[] { 1, 2, 3 };
             var list = new SpanList<int>(buffer, 2);
             list.RemoveAt(index);
         });
@@ -336,10 +345,9 @@ public class SpanListTests
     [Fact]
     public void RemoveAt_OnEmptyList_Throws()
     {
-        var buffer = new int[2];
-
         Assert.Throws<ArgumentOutOfRangeException>(() =>
         {
+            Span<int> buffer = stackalloc int[2];
             var list = new SpanList<int>(buffer);
             list.RemoveAt(0);
         });
@@ -351,7 +359,7 @@ public class SpanListTests
     [Fact]
     public void Remove_ExistingItem_ReturnsTrueAndRemovesFirstMatch()
     {
-        var list = new SpanList<int>(new[] { 1, 2, 1, 3 }, 4);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2, 1, 3 }, 4);
 
         var removed = list.Remove(1);
 
@@ -368,7 +376,7 @@ public class SpanListTests
     [Fact]
     public void Remove_MissingItem_ReturnsFalseAndKeepsList()
     {
-        var list = new SpanList<int>(new[] { 1, 2, 3 }, 3);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2, 3 }, 3);
 
         var removed = list.Remove(9);
 
@@ -382,7 +390,7 @@ public class SpanListTests
     [Fact]
     public void Remove_OnEmptyList_ReturnsFalse()
     {
-        var list = new SpanList<int>(new int[2]);
+        var list = new SpanList<int>(stackalloc int[] { 0, 0 });
 
         Assert.False(list.Remove(0));
     }
@@ -393,7 +401,7 @@ public class SpanListTests
     [Fact]
     public void Remove_FromFullList_AllowsAddAgain()
     {
-        var list = new SpanList<int>(new[] { 1, 2 }, 2);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2 }, 2);
 
         list.Remove(1);
         list.Add(5);
@@ -413,7 +421,7 @@ public class SpanListTests
     [Fact]
     public void Indexer_ReturnsWritableReference()
     {
-        var buffer = new[] { 1, 2, 3 };
+        Span<int> buffer = stackalloc int[] { 1, 2, 3 };
         var list = new SpanList<int>(buffer, 3);
 
         list[1] = 42;
@@ -428,7 +436,7 @@ public class SpanListTests
     [Fact]
     public void Indexer_CanAccessBackingSpanBeyondCount()
     {
-        var list = new SpanList<int>(new[] { 1, 2, 3 }, 1);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2, 3 }, 1);
 
         Assert.Equal(3, list[2]);
     }
@@ -442,10 +450,9 @@ public class SpanListTests
     [InlineData(3)]
     public void Indexer_OutsideCapacity_Throws(int index)
     {
-        var buffer = new int[3];
-
         Assert.Throws<IndexOutOfRangeException>(() =>
         {
+            Span<int> buffer = stackalloc int[3];
             var list = new SpanList<int>(buffer);
             return list[index];
         });
@@ -461,13 +468,13 @@ public class SpanListTests
     [Fact]
     public void ImplicitConversion_ToSpan_CoversOnlyCurrentElements()
     {
-        var buffer = new[] { 1, 2, 3, 4 };
+        Span<int> buffer = stackalloc int[] { 1, 2, 3, 4 };
         var list = new SpanList<int>(buffer, 3);
 
         Span<int> span = list;
 
         Assert.Equal(3, span.Length);
-        Assert.True(span.SequenceEqual(new[] { 1, 2, 3 }));
+        Assert.True(span.SequenceEqual(stackalloc int[] { 1, 2, 3 }));
         span[0] = 99;
         Assert.Equal(99, buffer[0]);
     }
@@ -478,12 +485,12 @@ public class SpanListTests
     [Fact]
     public void ImplicitConversion_ToReadOnlySpan_CoversOnlyCurrentElements()
     {
-        var list = new SpanList<int>(new[] { 1, 2, 3, 4 }, 2);
+        var list = new SpanList<int>(stackalloc int[] { 1, 2, 3, 4 }, 2);
 
         ReadOnlySpan<int> span = list;
 
         Assert.Equal(2, span.Length);
-        Assert.True(span.SequenceEqual(new[] { 1, 2 }));
+        Assert.True(span.SequenceEqual(stackalloc int[] { 1, 2 }));
     }
 
     /// <summary>
@@ -492,7 +499,7 @@ public class SpanListTests
     [Fact]
     public void ImplicitConversion_OnEmptyList_ReturnsEmptySpan()
     {
-        var list = new SpanList<int>(new int[3]);
+        var list = new SpanList<int>(stackalloc int[3]);
 
         Span<int> span = list;
         ReadOnlySpan<int> readOnly = list;
@@ -507,14 +514,14 @@ public class SpanListTests
     [Fact]
     public void ImplicitConversion_ReflectsLaterChanges()
     {
-        var list = new SpanList<int>(new int[3]);
+        var list = new SpanList<int>(stackalloc int[3]);
         list.Add(1);
         list.Add(2);
         list.Remove(1);
 
         ReadOnlySpan<int> span = list;
 
-        Assert.True(span.SequenceEqual(new[] { 2 }));
+        Assert.True(span.SequenceEqual(stackalloc int[] { 2 }));
     }
 
     #endregion

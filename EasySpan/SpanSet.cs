@@ -1,13 +1,41 @@
 using System;
+using System.Runtime.InteropServices;
 
 namespace EasySpan
 {
+    /// <summary>
+    /// Provides factory methods for <see cref="SpanSet{T}"/>.
+    /// </summary>
+    public static class SpanSet
+    {
+        /// <summary>
+        /// Creates a <see cref="SpanSet{T}"/> over the first <paramref name="count"/> elements of the backing
+        /// <see cref="Span{T}"/> without validating that they are unique.
+        /// </summary>
+        /// <remarks>
+        /// The caller must guarantee that the first <paramref name="count"/> elements are distinct; duplicates
+        /// leave the set in an inconsistent state. Prefer this over the count constructor for large inputs,
+        /// where the O(n²) uniqueness check would dominate.
+        /// </remarks>
+        /// <typeparam name="T">The unmanaged type of elements, implementing <see cref="IEquatable{T}"/>.</typeparam>
+        /// <param name="span">The <see cref="Span{T}"/> used to store the set elements.</param>
+        /// <param name="count">The initial number of elements in the set.</param>
+        /// <returns>A set exposing the leading elements of <paramref name="span"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The count exceeds the span length.</exception>
+        public static SpanSet<T> CreateUnchecked<T>(Span<T> span, int count) where T : unmanaged, IEquatable<T>
+        {
+            return new SpanSet<T>(span, count, validate: false);
+        }
+    }
+
     /// <summary>
     /// Represents a fixed-capacity set of unique elements backed by a caller-provided <see cref="Span{T}"/>.
     /// </summary>
     /// <remarks>
     /// Elements are stored linearly; membership checks are O(n). This type is intended for small sets
-    /// in allocation-sensitive code paths, where it avoids the heap allocations of <c>HashSet&lt;T&gt;</c>.
+    /// (roughly up to a few dozen elements) in allocation-sensitive code paths, where it avoids the heap
+    /// allocations of <c>HashSet&lt;T&gt;</c>. The count constructor validates uniqueness in O(n²); when
+    /// the caller already guarantees distinct elements, use <see cref="SpanSet.CreateUnchecked{T}"/> to skip that cost.
     /// </remarks>
     /// <typeparam name="T">The unmanaged type of elements, implementing <see cref="IEquatable{T}"/>.</typeparam>
     public ref struct SpanSet<T> where T : unmanaged, IEquatable<T>
@@ -40,6 +68,11 @@ namespace EasySpan
         /// <exception cref="ArgumentOutOfRangeException">The count exceeds the span length.</exception>
         /// <exception cref="ArgumentException">The first <paramref name="count"/> elements contain duplicates.</exception>
         public SpanSet(Span<T> span, int count)
+            : this(span, count, validate: true)
+        {
+        }
+
+        internal SpanSet(Span<T> span, int count, bool validate)
         {
             _span = span;
             Count = count;
@@ -49,9 +82,14 @@ namespace EasySpan
                     "Count cannot be greater than the capacity of the span.");
             }
 
+            if (!validate)
+            {
+                return;
+            }
+
             for (var i = 1; i < Count; i++)
             {
-                if (IndexOf(_span[i], i) != -1)
+                if (SpanSearch.Contains(Prefix(i), _span[i]))
                 {
                     throw new ArgumentException("The initial elements must be unique.", nameof(span));
                 }
@@ -62,6 +100,12 @@ namespace EasySpan
         /// Gets the maximum number of elements the backing <see cref="Span{T}"/> can hold.
         /// </summary>
         public readonly int Capacity => _span.Length;
+
+        /// <summary>
+        /// Gets a read-only view over the first <see cref="Count"/> elements without a bounds check;
+        /// the invariant <c>Count &lt;= Capacity</c> is maintained by every mutating member.
+        /// </summary>
+        private readonly ReadOnlySpan<T> Items => Prefix(Count);
 
         /// <summary>
         /// Determines whether <see cref="Count"/> equals <see cref="Capacity"/>.
@@ -129,7 +173,7 @@ namespace EasySpan
         /// <returns>True if the element is found; otherwise, false.</returns>
         public readonly bool Contains(T item)
         {
-            return IndexOf(item, Count) != -1;
+            return SpanSearch.Contains(Items, item);
         }
 
         /// <summary>
@@ -173,9 +217,15 @@ namespace EasySpan
         /// <param name="other">The elements to keep.</param>
         public void IntersectWith(ReadOnlySpan<T> other)
         {
+            if (other.Length == 0)
+            {
+                Clear();
+                return;
+            }
+
             for (var i = Count - 1; i >= 0; i--)
             {
-                if (other.IndexOf(_span[i]) == -1)
+                if (!SpanSearch.Contains(other, _span[i]))
                 {
                     Count--;
                     _span[i] = _span[Count];
@@ -202,9 +252,24 @@ namespace EasySpan
         /// <returns>True if at least one element is common; otherwise, false.</returns>
         public readonly bool Overlaps(ReadOnlySpan<T> other)
         {
-            foreach (var item in other)
+            var self = Items;
+            if (self.Length == 0 || other.Length == 0)
             {
-                if (Contains(item))
+                return false;
+            }
+
+            // Iterate the shorter side so each vectorized scan covers the longer one.
+            var outer = other;
+            var inner = self;
+            if (self.Length < other.Length)
+            {
+                outer = self;
+                inner = other;
+            }
+
+            foreach (var item in outer)
+            {
+                if (SpanSearch.Contains(inner, item))
                 {
                     return true;
                 }
@@ -220,9 +285,14 @@ namespace EasySpan
         /// <returns>True if the set is a subset of <paramref name="other"/>; otherwise, false.</returns>
         public readonly bool IsSubsetOf(ReadOnlySpan<T> other)
         {
-            for (var i = 0; i < Count; i++)
+            if (other.Length < Count)
             {
-                if (other.IndexOf(_span[i]) == -1)
+                return false;
+            }
+
+            foreach (var item in Items)
+            {
+                if (!SpanSearch.Contains(other, item))
                 {
                     return false;
                 }
@@ -234,13 +304,15 @@ namespace EasySpan
         /// <summary>
         /// Determines whether every element of the specified span is present in the set.
         /// </summary>
+        /// <remarks>Duplicate elements in the specified span are ignored.</remarks>
         /// <param name="other">The elements to compare against.</param>
         /// <returns>True if the set is a superset of <paramref name="other"/>; otherwise, false.</returns>
         public readonly bool IsSupersetOf(ReadOnlySpan<T> other)
         {
+            var self = Items;
             foreach (var item in other)
             {
-                if (!Contains(item))
+                if (!SpanSearch.Contains(self, item))
                 {
                     return false;
                 }
@@ -267,7 +339,7 @@ namespace EasySpan
         /// <returns>An allocation-free enumerator for use with <c>foreach</c>.</returns>
         public readonly ReadOnlySpan<T>.Enumerator GetEnumerator()
         {
-            return ((ReadOnlySpan<T>)_span[..Count]).GetEnumerator();
+            return Items.GetEnumerator();
         }
 
         /// <summary>
@@ -277,7 +349,7 @@ namespace EasySpan
         /// <returns>A <see cref="ReadOnlySpan{T}"/> over the first <see cref="Count"/> elements of the backing span.</returns>
         public static implicit operator ReadOnlySpan<T>(SpanSet<T> spanSet)
         {
-            return spanSet._span[..spanSet.Count];
+            return spanSet.Items;
         }
 
         /// <summary>
@@ -288,15 +360,18 @@ namespace EasySpan
         /// <returns>The index of the element, or -1 if it is not found.</returns>
         private readonly int IndexOf(T item, int length)
         {
-            for (var index = 0; index < length; index++)
-            {
-                if (_span[index].Equals(item))
-                {
-                    return index;
-                }
-            }
+            return Prefix(length).IndexOf(item);
+        }
 
-            return -1;
+        /// <summary>
+        /// Creates a read-only view over the first <paramref name="length"/> elements of the backing span
+        /// without a bounds check. Callers must guarantee <c>0 &lt;= length &lt;= Capacity</c>.
+        /// </summary>
+        /// <param name="length">The number of leading elements to expose.</param>
+        /// <returns>A <see cref="ReadOnlySpan{T}"/> over the leading elements.</returns>
+        private readonly ReadOnlySpan<T> Prefix(int length)
+        {
+            return MemoryMarshal.CreateReadOnlySpan(ref MemoryMarshal.GetReference(_span), length);
         }
     }
 }

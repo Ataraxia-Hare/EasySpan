@@ -13,7 +13,7 @@ public class SpanSetTests
     [Fact]
     public void Constructor_WithSpan_CreatesEmptySet()
     {
-        var set = new SpanSet<int>(new int[4]);
+        var set = new SpanSet<int>(stackalloc int[4]);
 
         Assert.Equal(0, set.Count);
         Assert.Equal(4, set.Capacity);
@@ -43,7 +43,7 @@ public class SpanSetTests
     [InlineData(4)]
     public void Constructor_WithCount_SetsCountAndKeepsExistingData(int count)
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3, 4 }, count);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3, 4 }, count);
 
         Assert.Equal(count, set.Count);
         Assert.Equal(4, set.Capacity);
@@ -59,9 +59,11 @@ public class SpanSetTests
     [Fact]
     public void Constructor_WithCountGreaterThanCapacity_Throws()
     {
-        var buffer = new int[3];
-
-        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new SpanSet<int>(buffer, 4));
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            Span<int> buffer = stackalloc int[3];
+            _ = new SpanSet<int>(buffer, 4);
+        });
         Assert.Equal("count", ex.ParamName);
     }
 
@@ -71,9 +73,11 @@ public class SpanSetTests
     [Fact]
     public void Constructor_WithDuplicateInitialElements_Throws()
     {
-        var buffer = new[] { 1, 2, 1 };
-
-        var ex = Assert.Throws<ArgumentException>(() => new SpanSet<int>(buffer, 3));
+        var ex = Assert.Throws<ArgumentException>(() =>
+        {
+            Span<int> buffer = stackalloc int[] { 1, 2, 1 };
+            _ = new SpanSet<int>(buffer, 3);
+        });
         Assert.Equal("span", ex.ParamName);
     }
 
@@ -83,9 +87,54 @@ public class SpanSetTests
     [Fact]
     public void Constructor_WithDuplicatesBeyondCount_Succeeds()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 1 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 1 }, 2);
 
         Assert.Equal(2, set.Count);
+    }
+
+    /// <summary>
+    /// <see cref="SpanSet.CreateUnchecked{T}"/> exposes the first <paramref name="count"/> existing elements of the span.
+    /// </summary>
+    /// <param name="count">The initial element count.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void CreateUnchecked_SetsCountAndKeepsExistingData(int count)
+    {
+        var set = SpanSet.CreateUnchecked(stackalloc int[] { 1, 2, 3, 4 }, count);
+
+        Assert.Equal(count, set.Count);
+        Assert.Equal(4, set.Capacity);
+        for (var i = 1; i <= count; i++)
+        {
+            Assert.True(set.Contains(i));
+        }
+    }
+
+    /// <summary>
+    /// <see cref="SpanSet.CreateUnchecked{T}"/> still rejects a count greater than the span length.
+    /// </summary>
+    [Fact]
+    public void CreateUnchecked_WithCountGreaterThanCapacity_Throws()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            Span<int> buffer = stackalloc int[3];
+            _ = SpanSet.CreateUnchecked(buffer, 4);
+        });
+        Assert.Equal("count", ex.ParamName);
+    }
+
+    /// <summary>
+    /// <see cref="SpanSet.CreateUnchecked{T}"/> skips the uniqueness check and accepts duplicate initial elements.
+    /// </summary>
+    [Fact]
+    public void CreateUnchecked_WithDuplicateInitialElements_DoesNotThrow()
+    {
+        var set = SpanSet.CreateUnchecked(stackalloc int[] { 1, 2, 1 }, 3);
+
+        Assert.Equal(3, set.Count);
     }
 
     #endregion
@@ -98,14 +147,14 @@ public class SpanSetTests
     [Fact]
     public void Add_NewItems_ReturnsTrueAndWritesToBackingSpan()
     {
-        var buffer = new int[3];
+        Span<int> buffer = stackalloc int[] { 0, 0, 0 };
         var set = new SpanSet<int>(buffer);
 
         Assert.True(set.Add(10));
         Assert.True(set.Add(20));
 
         Assert.Equal(2, set.Count);
-        Assert.Equal(new[] { 10, 20, 0 }, buffer);
+        Assert.True(buffer.SequenceEqual(stackalloc int[] { 10, 20, 0 }));
     }
 
     /// <summary>
@@ -114,7 +163,7 @@ public class SpanSetTests
     [Fact]
     public void Add_DuplicateItem_ReturnsFalseAndKeepsCount()
     {
-        var set = new SpanSet<int>(new int[3]);
+        var set = new SpanSet<int>(stackalloc int[3]);
         set.Add(1);
 
         Assert.False(set.Add(1));
@@ -127,7 +176,7 @@ public class SpanSetTests
     [Fact]
     public void Add_ManyDuplicates_KeepsOnlyDistinctItems()
     {
-        var set = new SpanSet<int>(new int[4]);
+        var set = new SpanSet<int>(stackalloc int[4]);
 
         for (var i = 0; i < 20; i++)
         {
@@ -146,7 +195,7 @@ public class SpanSetTests
     [Fact]
     public void Add_UntilCapacity_BecomesFull()
     {
-        var set = new SpanSet<int>(new int[2]);
+        var set = new SpanSet<int>(stackalloc int[2]);
 
         set.Add(1);
         Assert.False(set.IsFull());
@@ -161,14 +210,22 @@ public class SpanSetTests
     [Fact]
     public void Add_NewItemWhenFull_Throws()
     {
-        var buffer = new int[1];
+        Span<int> buffer = stackalloc int[1];
+        var set = new SpanSet<int>(buffer);
+        set.Add(1);
 
-        Assert.Throws<InvalidOperationException>(() =>
+        InvalidOperationException? exception = null;
+        try
         {
-            var set = new SpanSet<int>(buffer);
-            set.Add(1);
             set.Add(2);
-        });
+        }
+        catch (InvalidOperationException ex)
+        {
+            exception = ex;
+        }
+
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Equal(1, set.Count);
         Assert.Equal(1, buffer[0]);
     }
 
@@ -178,7 +235,7 @@ public class SpanSetTests
     [Fact]
     public void Add_DuplicateWhenFull_ReturnsFalse()
     {
-        var set = new SpanSet<int>(new[] { 1, 2 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
 
         Assert.False(set.Add(1));
         Assert.Equal(2, set.Count);
@@ -203,7 +260,7 @@ public class SpanSetTests
     [Fact]
     public void TryAdd_NewAndDuplicateItems_ReturnsExpectedResults()
     {
-        var set = new SpanSet<int>(new int[2]);
+        var set = new SpanSet<int>(stackalloc int[2]);
 
         Assert.True(set.TryAdd(1));
         Assert.False(set.TryAdd(1));
@@ -216,7 +273,7 @@ public class SpanSetTests
     [Fact]
     public void TryAdd_WhenFull_ReturnsFalse()
     {
-        var set = new SpanSet<int>(new[] { 1 }, 1);
+        var set = new SpanSet<int>(stackalloc int[] { 1 }, 1);
 
         Assert.False(set.TryAdd(2));
         Assert.False(set.TryAdd(1));
@@ -234,7 +291,7 @@ public class SpanSetTests
     [Fact]
     public void Clear_ResetsCountButKeepsBackingData()
     {
-        var buffer = new int[3];
+        Span<int> buffer = stackalloc int[] { 0, 0, 0 };
         var set = new SpanSet<int>(buffer);
         set.Add(1);
         set.Add(2);
@@ -243,7 +300,7 @@ public class SpanSetTests
 
         Assert.Equal(0, set.Count);
         Assert.Equal(3, set.Capacity);
-        Assert.Equal(new[] { 1, 2, 0 }, buffer);
+        Assert.True(buffer.SequenceEqual(stackalloc int[] { 1, 2, 0 }));
     }
 
     /// <summary>
@@ -252,7 +309,7 @@ public class SpanSetTests
     [Fact]
     public void Clear_ThenAdd_AllowsPreviousItemsAgain()
     {
-        var set = new SpanSet<int>(new int[2]);
+        var set = new SpanSet<int>(stackalloc int[2]);
         set.Add(1);
         set.Add(2);
 
@@ -269,7 +326,7 @@ public class SpanSetTests
     [Fact]
     public void Clear_OnEmptySet_DoesNothing()
     {
-        var set = new SpanSet<int>(new int[2]);
+        var set = new SpanSet<int>(stackalloc int[2]);
 
         set.Clear();
 
@@ -286,7 +343,7 @@ public class SpanSetTests
     [Fact]
     public void Contains_ReflectsPresenceWithinCount()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3 }, 2);
 
         Assert.True(set.Contains(1));
         Assert.True(set.Contains(2));
@@ -299,7 +356,7 @@ public class SpanSetTests
     [Fact]
     public void Contains_OnEmptySet_ReturnsFalse()
     {
-        var set = new SpanSet<int>(new int[2]);
+        var set = new SpanSet<int>(stackalloc int[] { 0, 0 });
 
         Assert.False(set.Contains(0));
     }
@@ -310,7 +367,7 @@ public class SpanSetTests
     [Fact]
     public void Contains_WorksWithCustomEquatableStruct()
     {
-        var set = new SpanSet<Point>(new Point[3]);
+        var set = new SpanSet<Point>(stackalloc Point[3]);
         set.Add(new Point(1, 2));
         set.Add(new Point(3, 4));
 
@@ -325,7 +382,7 @@ public class SpanSetTests
     [Fact]
     public void Add_UsesCustomEqualityImplementation()
     {
-        var set = new SpanSet<KeyOnly>(new KeyOnly[2]);
+        var set = new SpanSet<KeyOnly>(stackalloc KeyOnly[2]);
 
         Assert.True(set.Add(new KeyOnly(1, 100)));
         Assert.False(set.Add(new KeyOnly(1, 200)));
@@ -343,7 +400,7 @@ public class SpanSetTests
     [Fact]
     public void Remove_ExistingItem_ReturnsTrueAndRemovesItem()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3, 4 }, 4);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3, 4 }, 4);
 
         Assert.True(set.Remove(2));
 
@@ -360,7 +417,7 @@ public class SpanSetTests
     [Fact]
     public void Remove_MissingItem_ReturnsFalseAndKeepsSet()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3 }, 3);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3 }, 3);
 
         Assert.False(set.Remove(9));
         Assert.Equal(3, set.Count);
@@ -372,7 +429,7 @@ public class SpanSetTests
     [Fact]
     public void Remove_OnEmptySet_ReturnsFalse()
     {
-        var set = new SpanSet<int>(new int[2]);
+        var set = new SpanSet<int>(stackalloc int[] { 0, 0 });
 
         Assert.False(set.Remove(0));
     }
@@ -383,7 +440,7 @@ public class SpanSetTests
     [Fact]
     public void Remove_OnlyElement_EmptiesSet()
     {
-        var set = new SpanSet<int>(new[] { 1 }, 1);
+        var set = new SpanSet<int>(stackalloc int[] { 1 }, 1);
 
         set.Remove(1);
 
@@ -396,7 +453,7 @@ public class SpanSetTests
     [Fact]
     public void Remove_FromFullSet_AllowsAddAgain()
     {
-        var set = new SpanSet<int>(new[] { 1, 2 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
 
         set.Remove(1);
         set.Add(5);
@@ -412,7 +469,7 @@ public class SpanSetTests
     [Fact]
     public void Remove_ThenAddSameItem_Succeeds()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3 }, 3);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3 }, 3);
 
         set.Remove(1);
 
@@ -430,19 +487,21 @@ public class SpanSetTests
     [Fact]
     public void Enumeration_VisitsEachElementOnce()
     {
-        var set = new SpanSet<int>(new int[4]);
+        var set = new SpanSet<int>(stackalloc int[4]);
         set.Add(3);
         set.Add(1);
         set.Add(2);
 
-        var visited = new List<int>();
+        Span<int> visited = stackalloc int[3];
+        var count = 0;
         foreach (var item in set)
         {
-            visited.Add(item);
+            visited[count++] = item;
         }
 
+        Assert.Equal(3, count);
         visited.Sort();
-        Assert.Equal(new[] { 1, 2, 3 }, visited);
+        Assert.True(visited.SequenceEqual(stackalloc int[] { 1, 2, 3 }));
     }
 
     /// <summary>
@@ -451,7 +510,7 @@ public class SpanSetTests
     [Fact]
     public void Enumeration_OnEmptySet_YieldsNothing()
     {
-        var set = new SpanSet<int>(new int[3]);
+        var set = new SpanSet<int>(stackalloc int[3]);
 
         var count = 0;
         foreach (var _ in set)
@@ -468,7 +527,7 @@ public class SpanSetTests
     [Fact]
     public void Enumeration_IgnoresItemsBeyondCount()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3 }, 2);
 
         var sum = 0;
         foreach (var item in set)
@@ -485,12 +544,12 @@ public class SpanSetTests
     [Fact]
     public void ImplicitConversion_ToReadOnlySpan_CoversOnlyCurrentElements()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3, 4 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3, 4 }, 2);
 
         ReadOnlySpan<int> span = set;
 
         Assert.Equal(2, span.Length);
-        Assert.True(span.SequenceEqual(new[] { 1, 2 }));
+        Assert.True(span.SequenceEqual(stackalloc int[] { 1, 2 }));
     }
 
     /// <summary>
@@ -499,7 +558,7 @@ public class SpanSetTests
     [Fact]
     public void ImplicitConversion_OnEmptySet_ReturnsEmptySpan()
     {
-        var set = new SpanSet<int>(new int[3]);
+        var set = new SpanSet<int>(stackalloc int[3]);
 
         ReadOnlySpan<int> span = set;
 
@@ -512,14 +571,14 @@ public class SpanSetTests
     [Fact]
     public void ImplicitConversion_ReflectsLaterChanges()
     {
-        var set = new SpanSet<int>(new int[3]);
+        var set = new SpanSet<int>(stackalloc int[3]);
         set.Add(1);
         set.Add(2);
         set.Remove(1);
 
         ReadOnlySpan<int> span = set;
 
-        Assert.True(span.SequenceEqual(new[] { 2 }));
+        Assert.True(span.SequenceEqual(stackalloc int[] { 2 }));
     }
 
     #endregion
@@ -532,14 +591,15 @@ public class SpanSetTests
     [Fact]
     public void UnionWith_AddsOnlyMissingElements()
     {
-        var set = new SpanSet<int>(new int[5]);
+        var set = new SpanSet<int>(stackalloc int[5]);
         set.Add(1);
         set.Add(2);
 
-        set.UnionWith(new[] { 2, 3, 3, 4 });
+        ReadOnlySpan<int> other = stackalloc int[] { 2, 3, 3, 4 };
+        set.UnionWith(other);
 
         Assert.Equal(4, set.Count);
-        Assert.True(set.SetEquals(new[] { 1, 2, 3, 4 }));
+        Assert.True(set.SetEquals(stackalloc int[] { 1, 2, 3, 4 }));
     }
 
     /// <summary>
@@ -548,7 +608,7 @@ public class SpanSetTests
     [Fact]
     public void UnionWith_EmptySpan_DoesNothing()
     {
-        var set = new SpanSet<int>(new[] { 1, 2 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
 
         set.UnionWith(ReadOnlySpan<int>.Empty);
 
@@ -561,12 +621,12 @@ public class SpanSetTests
     [Fact]
     public void UnionWith_ExceedingCapacity_Throws()
     {
-        var buffer = new int[2];
-
         Assert.Throws<InvalidOperationException>(() =>
         {
+            Span<int> buffer = stackalloc int[2];
             var set = new SpanSet<int>(buffer);
-            set.UnionWith(new[] { 1, 2, 3 });
+            ReadOnlySpan<int> other = stackalloc int[] { 1, 2, 3 };
+            set.UnionWith(other);
         });
     }
 
@@ -576,12 +636,13 @@ public class SpanSetTests
     [Fact]
     public void IntersectWith_KeepsOnlySharedElements()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3, 4 }, 4);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3, 4 }, 4);
 
-        set.IntersectWith(new[] { 2, 4, 6 });
+        ReadOnlySpan<int> other = stackalloc int[] { 2, 4, 6 };
+        set.IntersectWith(other);
 
         Assert.Equal(2, set.Count);
-        Assert.True(set.SetEquals(new[] { 2, 4 }));
+        Assert.True(set.SetEquals(stackalloc int[] { 2, 4 }));
     }
 
     /// <summary>
@@ -590,7 +651,7 @@ public class SpanSetTests
     [Fact]
     public void IntersectWith_EmptySpan_EmptiesSet()
     {
-        var set = new SpanSet<int>(new[] { 1, 2 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
 
         set.IntersectWith(ReadOnlySpan<int>.Empty);
 
@@ -603,12 +664,13 @@ public class SpanSetTests
     [Fact]
     public void IntersectWith_Superset_KeepsAllElements()
     {
-        var set = new SpanSet<int>(new[] { 1, 2 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
 
-        set.IntersectWith(new[] { 0, 1, 2, 3 });
+        ReadOnlySpan<int> other = stackalloc int[] { 0, 1, 2, 3 };
+        set.IntersectWith(other);
 
         Assert.Equal(2, set.Count);
-        Assert.True(set.SetEquals(new[] { 1, 2 }));
+        Assert.True(set.SetEquals(stackalloc int[] { 1, 2 }));
     }
 
     /// <summary>
@@ -617,12 +679,13 @@ public class SpanSetTests
     [Fact]
     public void ExceptWith_RemovesListedElements()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3, 4 }, 4);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3, 4 }, 4);
 
-        set.ExceptWith(new[] { 2, 4, 9 });
+        ReadOnlySpan<int> other = stackalloc int[] { 2, 4, 9 };
+        set.ExceptWith(other);
 
         Assert.Equal(2, set.Count);
-        Assert.True(set.SetEquals(new[] { 1, 3 }));
+        Assert.True(set.SetEquals(stackalloc int[] { 1, 3 }));
     }
 
     /// <summary>
@@ -631,7 +694,7 @@ public class SpanSetTests
     [Fact]
     public void ExceptWith_EmptySpan_DoesNothing()
     {
-        var set = new SpanSet<int>(new[] { 1, 2 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
 
         set.ExceptWith(ReadOnlySpan<int>.Empty);
 
@@ -644,10 +707,48 @@ public class SpanSetTests
     [Fact]
     public void Overlaps_ReflectsSharedElements()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3 }, 3);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3 }, 3);
 
-        Assert.True(set.Overlaps(new[] { 9, 3 }));
-        Assert.False(set.Overlaps(new[] { 7, 8 }));
+        Assert.True(set.Overlaps(stackalloc int[] { 9, 3 }));
+        Assert.False(set.Overlaps(stackalloc int[] { 7, 8 }));
+        Assert.False(set.Overlaps(ReadOnlySpan<int>.Empty));
+    }
+
+    /// <summary>
+    /// <see cref="SpanSet{T}.Overlaps"/> finds shared elements when the other span is shorter than the set.
+    /// </summary>
+    [Fact]
+    public void Overlaps_OtherShorterThanSet_ReflectsSharedElements()
+    {
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3, 4 }, 4);
+
+        Assert.True(set.Overlaps(stackalloc int[] { 9, 4 }));
+        Assert.True(set.Overlaps(stackalloc int[] { 1 }));
+        Assert.False(set.Overlaps(stackalloc int[] { 9, 8 }));
+    }
+
+    /// <summary>
+    /// <see cref="SpanSet{T}.Overlaps"/> finds shared elements when the other span is longer than the set.
+    /// </summary>
+    [Fact]
+    public void Overlaps_OtherLongerThanSet_ReflectsSharedElements()
+    {
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
+
+        Assert.True(set.Overlaps(stackalloc int[] { 9, 8, 7, 2 }));
+        Assert.True(set.Overlaps(stackalloc int[] { 1, 8, 7, 6 }));
+        Assert.False(set.Overlaps(stackalloc int[] { 9, 8, 7, 6 }));
+    }
+
+    /// <summary>
+    /// An empty set never overlaps, even with a non-empty span.
+    /// </summary>
+    [Fact]
+    public void Overlaps_EmptySet_IsFalse()
+    {
+        var set = new SpanSet<int>(stackalloc int[2]);
+
+        Assert.False(set.Overlaps(stackalloc int[] { 1, 2 }));
         Assert.False(set.Overlaps(ReadOnlySpan<int>.Empty));
     }
 
@@ -657,11 +758,11 @@ public class SpanSetTests
     [Fact]
     public void IsSubsetOf_ReflectsContainment()
     {
-        var set = new SpanSet<int>(new[] { 1, 2 }, 2);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
 
-        Assert.True(set.IsSubsetOf(new[] { 2, 1, 3 }));
-        Assert.True(set.IsSubsetOf(new[] { 1, 2 }));
-        Assert.False(set.IsSubsetOf(new[] { 1 }));
+        Assert.True(set.IsSubsetOf(stackalloc int[] { 2, 1, 3 }));
+        Assert.True(set.IsSubsetOf(stackalloc int[] { 1, 2 }));
+        Assert.False(set.IsSubsetOf(stackalloc int[] { 1 }));
     }
 
     /// <summary>
@@ -670,10 +771,10 @@ public class SpanSetTests
     [Fact]
     public void IsSubsetOf_EmptySet_IsAlwaysTrue()
     {
-        var set = new SpanSet<int>(new int[2]);
+        var set = new SpanSet<int>(stackalloc int[2]);
 
         Assert.True(set.IsSubsetOf(ReadOnlySpan<int>.Empty));
-        Assert.True(set.IsSubsetOf(new[] { 1 }));
+        Assert.True(set.IsSubsetOf(stackalloc int[] { 1 }));
     }
 
     /// <summary>
@@ -682,12 +783,24 @@ public class SpanSetTests
     [Fact]
     public void IsSupersetOf_ReflectsContainment()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3 }, 3);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3 }, 3);
 
-        Assert.True(set.IsSupersetOf(new[] { 3, 1 }));
-        Assert.True(set.IsSupersetOf(new[] { 1, 1, 2 }));
+        Assert.True(set.IsSupersetOf(stackalloc int[] { 3, 1 }));
+        Assert.True(set.IsSupersetOf(stackalloc int[] { 1, 1, 2 }));
         Assert.True(set.IsSupersetOf(ReadOnlySpan<int>.Empty));
-        Assert.False(set.IsSupersetOf(new[] { 1, 4 }));
+        Assert.False(set.IsSupersetOf(stackalloc int[] { 1, 4 }));
+    }
+
+    /// <summary>
+    /// Repeated elements do not affect containment, even when the span is longer than the set.
+    /// </summary>
+    [Fact]
+    public void IsSupersetOf_WithMoreDuplicatesThanCount_IgnoresDuplicates()
+    {
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
+
+        Assert.True(set.IsSupersetOf(stackalloc int[] { 2, 1, 2, 1 }));
+        Assert.False(set.IsSupersetOf(stackalloc int[] { 1, 1, 3, 3 }));
     }
 
     /// <summary>
@@ -696,12 +809,14 @@ public class SpanSetTests
     [Fact]
     public void SetEquals_IgnoresOrderAndDuplicates()
     {
-        var set = new SpanSet<int>(new[] { 1, 2, 3 }, 3);
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2, 3 }, 3);
 
-        Assert.True(set.SetEquals(new[] { 3, 1, 2 }));
-        Assert.True(set.SetEquals(new[] { 1, 1, 2, 3, 3 }));
-        Assert.False(set.SetEquals(new[] { 1, 2 }));
-        Assert.False(set.SetEquals(new[] { 1, 2, 3, 4 }));
+        Assert.True(set.SetEquals(stackalloc int[] { 3, 1, 2 }));
+        Assert.True(set.SetEquals(stackalloc int[] { 1, 1, 2, 3, 3 }));
+        Assert.False(set.SetEquals(stackalloc int[] { 1, 2 }));
+        Assert.False(set.SetEquals(stackalloc int[] { 1, 2, 3, 4 }));
+        Assert.False(set.SetEquals(stackalloc int[] { 1, 1, 2, 2 }));
+        Assert.False(set.SetEquals(stackalloc int[] { 1, 2, 4 }));
     }
 
     /// <summary>
@@ -710,10 +825,10 @@ public class SpanSetTests
     [Fact]
     public void SetEquals_EmptySet_EqualsOnlyEmptySpan()
     {
-        var set = new SpanSet<int>(new int[2]);
+        var set = new SpanSet<int>(stackalloc int[2]);
 
         Assert.True(set.SetEquals(ReadOnlySpan<int>.Empty));
-        Assert.False(set.SetEquals(new[] { 1 }));
+        Assert.False(set.SetEquals(stackalloc int[] { 1 }));
     }
 
     #endregion
