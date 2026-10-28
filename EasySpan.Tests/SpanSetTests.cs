@@ -691,6 +691,18 @@ public class SpanSetTests
     }
 
     /// <summary>
+    /// Repeated elements do not affect containment, even when the span is longer than the set.
+    /// </summary>
+    [Fact]
+    public void IsSupersetOf_WithMoreDuplicatesThanCount_IgnoresDuplicates()
+    {
+        var set = new SpanSet<int>(stackalloc int[] { 1, 2 }, 2);
+
+        Assert.True(set.IsSupersetOf(stackalloc int[] { 2, 1, 2, 1 }));
+        Assert.False(set.IsSupersetOf(stackalloc int[] { 1, 1, 3, 3 }));
+    }
+
+    /// <summary>
     /// <see cref="SpanSet{T}.SetEquals"/> ignores order and duplicates in the other span.
     /// </summary>
     [Fact]
@@ -702,6 +714,8 @@ public class SpanSetTests
         Assert.True(set.SetEquals(new[] { 1, 1, 2, 3, 3 }));
         Assert.False(set.SetEquals(new[] { 1, 2 }));
         Assert.False(set.SetEquals(new[] { 1, 2, 3, 4 }));
+        Assert.False(set.SetEquals(stackalloc int[] { 1, 1, 2, 2 }));
+        Assert.False(set.SetEquals(stackalloc int[] { 1, 2, 4 }));
     }
 
     /// <summary>

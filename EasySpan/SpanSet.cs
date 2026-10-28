@@ -245,15 +245,11 @@ namespace EasySpan
         /// <summary>
         /// Determines whether every element of the specified span is present in the set.
         /// </summary>
+        /// <remarks>Duplicate elements in the specified span are ignored.</remarks>
         /// <param name="other">The elements to compare against.</param>
         /// <returns>True if the set is a superset of <paramref name="other"/>; otherwise, false.</returns>
         public readonly bool IsSupersetOf(ReadOnlySpan<T> other)
         {
-            if (Count < other.Length)
-            {
-                return false;
-            }
-
             foreach (var item in other)
             {
                 if (!Contains(item))
