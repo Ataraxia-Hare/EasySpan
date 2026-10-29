@@ -4,14 +4,15 @@ using BenchmarkDotNet.Configs;
 namespace EasySpan.Benchmarks;
 
 /// <summary>
-/// Measures <see cref="SpanSet{T}"/> query operations against <see cref="HashSet{T}"/> using
-/// batches of queries over a pre-filled set, so that construction cost is amortized rather than measured.
+/// Measures <see cref="SpanSet{T}"/> and <see cref="SpanLargeSet{T}"/> query operations against
+/// <see cref="HashSet{T}"/> using batches of queries over a pre-filled set, so that construction cost is
+/// amortized rather than measured.
 /// </summary>
 /// <remarks>
-/// <see cref="SpanSet{T}"/> is a ref struct and cannot be stored in a field, so each span benchmark wraps
-/// the pre-filled array with <see cref="SpanSet.CreateUnchecked{T}"/>, which is O(1), and then runs
-/// <see cref="ContainsBatchSize"/> or <see cref="OverlapsBatchSize"/> queries. The hash set is pre-filled
-/// in <see cref="Setup"/> and runs the identical query sequence.
+/// The span sets are ref structs and cannot be stored in fields, so each span benchmark wraps pre-filled
+/// arrays with <see cref="SpanSet.CreateUnchecked{T}"/> or <see cref="SpanLargeSet.CreateUnchecked{T}"/>,
+/// both O(1), and then runs <see cref="ContainsBatchSize"/> or <see cref="OverlapsBatchSize"/> queries.
+/// The hash set is pre-filled in <see cref="Setup"/> and runs the identical query sequence.
 /// </remarks>
 [MemoryDiagnoser]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
@@ -28,6 +29,7 @@ public class SpanSetQueryBenchmarks
     public const int ShortOtherLength = 8;
 
     private int[] _buffer = null!;
+    private int[] _table = null!;
     private int[] _hitQueries = null!;
     private int[] _missQueries = null!;
     private int[] _other = null!;
@@ -45,6 +47,10 @@ public class SpanSetQueryBenchmarks
         _buffer = new int[N];
         for (var i = 0; i < N; i++) _buffer[i] = i;
         _hashSet = new HashSet<int>(_buffer);
+
+        _table = new int[SpanLargeSet.RequiredTableLength(N)];
+        var largeSet = new SpanLargeSet<int>(new int[N], _table);
+        for (var i = 0; i < N; i++) largeSet.Add(i);
 
         var random = new Random(12345);
         _hitQueries = new int[ContainsBatchSize];
@@ -73,6 +79,15 @@ public class SpanSetQueryBenchmarks
         return CountHits(set, _hitQueries);
     }
 
+    /// <summary>Runs present-element queries against a SpanLargeSet wrapping pre-filled storage.</summary>
+    [Benchmark(OperationsPerInvoke = ContainsBatchSize)]
+    [BenchmarkCategory("Contains_Hit")]
+    public int SpanLargeSet_Contains_Hit()
+    {
+        var set = SpanLargeSet.CreateUnchecked<int>(_buffer, _table, N);
+        return CountHits(set, _hitQueries);
+    }
+
     /// <summary>Runs present-element queries against a pre-filled HashSet.</summary>
     [Benchmark(OperationsPerInvoke = ContainsBatchSize)]
     [BenchmarkCategory("Contains_Hit")]
@@ -87,6 +102,15 @@ public class SpanSetQueryBenchmarks
         return CountHits(set, _missQueries);
     }
 
+    /// <summary>Runs absent-element queries against a SpanLargeSet wrapping pre-filled storage.</summary>
+    [Benchmark(OperationsPerInvoke = ContainsBatchSize)]
+    [BenchmarkCategory("Contains_Miss")]
+    public int SpanLargeSet_Contains_Miss()
+    {
+        var set = SpanLargeSet.CreateUnchecked<int>(_buffer, _table, N);
+        return CountHits(set, _missQueries);
+    }
+
     /// <summary>Runs absent-element queries against a pre-filled HashSet.</summary>
     [Benchmark(OperationsPerInvoke = ContainsBatchSize)]
     [BenchmarkCategory("Contains_Miss")]
@@ -98,6 +122,21 @@ public class SpanSetQueryBenchmarks
     public int SpanSet_Overlaps()
     {
         var set = SpanSet.CreateUnchecked<int>(_buffer, N);
+        var hits = 0;
+        for (var i = 0; i < OverlapsBatchSize; i++)
+        {
+            if (set.Overlaps(_other)) hits++;
+        }
+
+        return hits;
+    }
+
+    /// <summary>Repeats an overlap check whose only shared element is the last one against a SpanLargeSet.</summary>
+    [Benchmark(OperationsPerInvoke = OverlapsBatchSize)]
+    [BenchmarkCategory("Overlaps")]
+    public int SpanLargeSet_Overlaps()
+    {
+        var set = SpanLargeSet.CreateUnchecked<int>(_buffer, _table, N);
         var hits = 0;
         for (var i = 0; i < OverlapsBatchSize; i++)
         {
@@ -136,6 +175,21 @@ public class SpanSetQueryBenchmarks
         return hits;
     }
 
+    /// <summary>Repeats an overlap check with a short probe span whose last element is shared, against a SpanLargeSet.</summary>
+    [Benchmark(OperationsPerInvoke = OverlapsBatchSize)]
+    [BenchmarkCategory("Overlaps_ShortOther")]
+    public int SpanLargeSet_Overlaps_ShortOther()
+    {
+        var set = SpanLargeSet.CreateUnchecked<int>(_buffer, _table, N);
+        var hits = 0;
+        for (var i = 0; i < OverlapsBatchSize; i++)
+        {
+            if (set.Overlaps(_shortOther)) hits++;
+        }
+
+        return hits;
+    }
+
     /// <summary>Repeats an overlap check with a short probe span whose last element is shared, against a HashSet.</summary>
     [Benchmark(OperationsPerInvoke = OverlapsBatchSize)]
     [BenchmarkCategory("Overlaps_ShortOther")]
@@ -151,6 +205,17 @@ public class SpanSetQueryBenchmarks
     }
 
     private static int CountHits(SpanSet<int> set, int[] queries)
+    {
+        var hits = 0;
+        for (var i = 0; i < queries.Length; i++)
+        {
+            if (set.Contains(queries[i])) hits++;
+        }
+
+        return hits;
+    }
+
+    private static int CountHits(SpanLargeSet<int> set, int[] queries)
     {
         var hits = 0;
         for (var i = 0; i < queries.Length; i++)
