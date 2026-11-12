@@ -36,6 +36,8 @@ namespace EasySpan
     /// (roughly up to a few dozen elements) in allocation-sensitive code paths, where it avoids the heap
     /// allocations of <c>HashSet&lt;T&gt;</c>. The count constructor validates uniqueness in O(n²); when
     /// the caller already guarantees distinct elements, use <see cref="SpanSet.CreateUnchecked{T}"/> to skip that cost.
+    /// For larger sets, prefer <see cref="SpanLargeSet{T}"/>, which offers the same API over hash-indexed storage
+    /// with O(1) average lookup, insertion, and removal.
     /// </remarks>
     /// <typeparam name="T">The unmanaged type of elements, implementing <see cref="IEquatable{T}"/>.</typeparam>
     public ref struct SpanSet<T> where T : unmanaged, IEquatable<T>

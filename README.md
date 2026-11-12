@@ -12,6 +12,7 @@ and garbage collection pressure in short-lived, allocation-sensitive code paths.
 
 - **`SpanList<T>`**: append, search, writable reference indexing, and constant-time unordered removal by index.
 - **`SpanSet<T>`**: unique elements, non-throwing `TryAdd`, set operations, relationship checks, and allocation-free enumeration.
+- **`SpanLargeSet<T>`**: the same set API over hash-indexed storage, with O(1) average lookup, insertion, and removal for larger sets.
 - **Caller-owned storage**: use stack-allocated memory, arrays, or slices of existing buffers.
 - **Fixed capacity**: no automatic resizing or internal backing-array allocation.
 - **Span interoperability**: expose current elements as `ReadOnlySpan<T>`, or as writable `Span<T>` for lists.
@@ -26,7 +27,7 @@ and garbage collection pressure in short-lived, allocation-sensitive code paths.
 | Build the full solution, run tests or benchmarks | .NET 9 SDK, as used by CI |
 | Element types | `T : unmanaged, IEquatable<T>` |
 
-Both collections are `ref struct` types. They cannot be boxed, stored in class fields, or
+All collections are `ref struct` types. They cannot be boxed, stored in class fields, or
 captured by lambdas, and must obey span lifetime rules. They are not drop-in replacements
 for `List<T>` or `HashSet<T>` when dynamically growing storage or heap-stored collections are required.
 
@@ -100,9 +101,35 @@ elements[0] = 99; // Also updates buffer[0].
 Supply a count between zero and the buffer length. `SpanSet<T>(buffer, count)` additionally
 requires the initial elements to be unique and throws `ArgumentException` for duplicates.
 
+### Choosing between `SpanSet<T>` and `SpanLargeSet<T>`
+
+`SpanSet<T>` searches its elements linearly and needs only one buffer. It is the right choice
+for small sets, roughly a few dozen elements, where a linear scan over contiguous memory beats
+hashing. `SpanLargeSet<T>` keeps the same elements buffer and adds a caller-provided `Span<int>`
+index table, giving O(1) average `Add`, `Contains`, and `Remove` regardless of size:
+
+```csharp
+int[] items = new int[1024];
+int[] table = new int[SpanLargeSet.RequiredTableLength(items.Length)];
+var set = new SpanLargeSet<int>(items, table);
+
+for (var i = 0; i < 1024; i++) set.Add(i * 7);
+Console.WriteLine(set.Contains(7 * 500)); // True.
+```
+
+The table length must be a power of two that is at least twice the elements capacity;
+`SpanLargeSet.RequiredTableLength(capacity)` returns the smallest valid length. The constructor
+clears the table, which is O(table length), and `SpanLargeSet<T>(items, table, count)` rebuilds the
+index for existing elements. `SpanLargeSet.CreateUnchecked` wraps storage whose table is already
+consistent without validation, which is useful for pre-filled buffers on hot paths.
+
+Both set types share the same operations, so switching between them is usually a matter of
+changing the constructor. Element order is unspecified for both, and hash quality matters for
+`SpanLargeSet<T>`: keys whose `GetHashCode` collides heavily degrade towards linear probing.
+
 ### Collection behavior
 
-| Operation | `SpanList<T>` | `SpanSet<T>` |
+| Operation | `SpanList<T>` | `SpanSet<T>` / `SpanLargeSet<T>` |
 | --- | --- | --- |
 | Size and capacity | `Count`, `Capacity`, `IsFull()` | `Count`, `Capacity`, `IsFull()` |
 | Add | `Add(item)` | `Add(item)` returns whether inserted |
@@ -117,7 +144,8 @@ also throws, but adding an existing element returns `false`.
 
 Removal replaces the removed element with the last element, so **element order is not preserved**.
 `Clear()` resets the count without wiping memory; removal also leaves data outside the active range.
-Neither operation should be used to erase sensitive data.
+`SpanLargeSet<T>.Clear()` additionally zeroes its index table. Neither operation should be used to
+erase sensitive data.
 
 The list indexer checks the backing span's bounds, not `Count`. Use indices below `Count`
 when accessing active elements, or convert to a span to obtain an active-range view.
@@ -145,6 +173,9 @@ These methods accept `ReadOnlySpan<T>`. `SetEquals` ignores input order and dupl
 `UnionWith` may partially modify the set before throwing if capacity is exhausted.
 Use separate input storage for mutating set operations rather than an overlapping view of the set's buffer.
 
+`SpanLargeSet<T>` offers the same operations and additionally accepts another `SpanLargeSet<T>`
+in `IntersectWith`, `IsSubsetOf`, and `SetEquals`, so both sides are probed by hash.
+
 ## Performance
 
 EasySpan avoids allocating collection storage internally; allocating an array for the backing
@@ -156,8 +187,15 @@ that additional backing-buffer allocation.
 are O(n), and inserting n distinct values takes O(n²) overall. It is intended for small,
 allocation-sensitive sets, not as a universal replacement for `HashSet<T>`.
 
-The BenchmarkDotNet project compares `SpanList<T>` with `List<T>` and `SpanSet<T>` with
-`HashSet<T>`, using 16, 256, and 4096 elements and reporting memory allocations.
+`SpanLargeSet<T>` uses an open-addressing index table with Fibonacci hashing, linear probing,
+and backward-shift deletion over a dense elements buffer. At a load factor of at most 50 %,
+`Add`, `Contains`, and `Remove` are O(1) on average and enumeration is a contiguous scan. In the
+end-to-end benchmarks it runs in roughly 15–50 % of the time of a presized, reused `HashSet<T>`
+across 16 to 65 536 elements, with zero allocations.
+
+The BenchmarkDotNet project compares `SpanList<T>` with `List<T>`, and `SpanSet<T>` and
+`SpanLargeSet<T>` with `HashSet<T>`, using 16, 256, and 4096 elements (and 65 536 for the
+large set) and reporting memory allocations.
 Run from the repository root:
 
 ```powershell
@@ -168,15 +206,19 @@ Run only the set comparisons:
 
 ```powershell
 dotnet run -c Release --project .\EasySpan.Benchmarks -- --filter '*SpanSetVsHashSet*'
+dotnet run -c Release --project .\EasySpan.Benchmarks -- --filter '*SpanLargeSetVsHashSet*'
 ```
 
 Two kinds of benchmarks are provided:
 
-- `SpanListVsListBenchmarks` and `SpanSetVsHashSetBenchmarks` are end-to-end scenarios:
-  both sides allocate or clear, fill, and then use the collection inside the timed region.
+- `SpanListVsListBenchmarks`, `SpanSetVsHashSetBenchmarks`, and `SpanLargeSetVsHashSetBenchmarks`
+  are end-to-end scenarios: both sides allocate or clear, fill, and then use the collection inside
+  the timed region. The large-set comparison reuses presized storage on both sides and includes
+  `SpanSet<T>` rows as a linear-search reference.
 - `SpanListQueryBenchmarks` and `SpanSetQueryBenchmarks` isolate query operations
   (`Contains`, `IndexOf`, indexer access, `Overlaps`) over pre-filled storage. List queries
-  wrap a pre-filled array with the O(1) count constructor. Set queries construct the set once
+  wrap a pre-filled array with the O(1) count constructor, and `SpanLargeSet<T>` queries wrap
+  pre-filled storage with `CreateUnchecked`. `SpanSet<T>` queries construct the set once
   per invocation and run a batch of queries, so the reported per-operation time still
   includes the O(n²) uniqueness validation divided by the batch size. The list batch also
   compares a stack-allocated and a heap-allocated buffer over the same query sequence.
@@ -197,6 +239,7 @@ API documentation is included as XML comments in the source and generated during
 
 - [`SpanList<T>` API](EasySpan/SpanList.cs)
 - [`SpanSet<T>` API](EasySpan/SpanSet.cs)
+- [`SpanLargeSet<T>` API](EasySpan/SpanLargeSet.cs)
 - [Tests and behavioral examples](EasySpan.Tests)
 - [Benchmark scenarios](EasySpan.Benchmarks)
 
