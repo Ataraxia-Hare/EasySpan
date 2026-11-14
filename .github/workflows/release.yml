@@ -27,7 +27,13 @@ jobs:
               run: dotnet test EasySpan.sln -c Release
 
             - name: Pack
-              run: dotnet pack EasySpan/EasySpan.csproj -c Release -o ./artifacts
+              run: |
+                  VERSION="${GITHUB_REF_NAME#v}"
+
+                  dotnet pack EasySpan/EasySpan.csproj \
+                    -c Release \
+                    -p:PackageVersion="$VERSION" \
+                    -o ./artifacts
 
             - name: NuGet Login
               uses: NuGet/login@v1
