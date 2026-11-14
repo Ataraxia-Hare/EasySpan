@@ -9,6 +9,26 @@
         <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+        <PackageId>EasySpan</PackageId>
+        <Version>1.0.0</Version>
+
+        <Authors>Ataraxia-Hare</Authors>
+        <Description>A high-performance collection library based on Span&lt;T&gt;.</Description>
+
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/Ataraxia-Hare/EasySpan</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/Ataraxia-Hare/EasySpan</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="../README.md"
+              Pack="true"
+              PackagePath="/"/>
+    </ItemGroup>
 
 </Project>
