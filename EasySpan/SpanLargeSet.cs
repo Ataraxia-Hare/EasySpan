@@ -569,7 +569,7 @@ namespace EasySpan
             SpanRef.At(_table, slot) = Count;
         }
 
-        private static void ValidateTable(Span<T> items, Span<int> table)
+        private static void ValidateTable(ReadOnlySpan<T> items, Span<int> table)
         {
             var length = table.Length;
             if (length < SpanLargeSet.MinTableLength || (length & (length - 1)) != 0)
